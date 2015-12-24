@@ -196,7 +196,11 @@ def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
     pip.main(["install", "unix_dates", "-t", "lambda"])
 
     # No need for boto3 to be packaged
-    pip.main(["uninstall", "-q", "boto3", "-t", "lambda"])
+    for fn in os.listdir(lambda_dir):
+        p = os.path.join(lambda_dir, fn)
+
+        if os.path.isdir(p) and fn.startswith("boto"):
+            shutil.rmtree(p)
 
     # ZIP it up!
     shutil.make_archive("lambda", "zip", lambda_dir)
