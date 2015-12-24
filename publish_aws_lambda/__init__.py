@@ -1,7 +1,6 @@
 """
 Publish the a python package as AWS lambdas functions.
 """
-import glob
 
 import logging
 import os
@@ -159,13 +158,12 @@ def print_plan(module, to_create, to_update, to_delete, unchanged):
     logger.info(pprint.pformat("   Unchanged: {}".format(unchanged)))
 
 
-def package_and_upload_module(root_dir, requirements, module_name, bucket):
+def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
     """
     Installs the module + all requirements into a folder ('lambda'). Zip it ('lambda.zip') and
     upload it to the indicated bucket in S3.
 
     :type root_dir: str
-    :type requirements: set[str]
     :type bucket: str
 
     :return: The s3 object key, path to the local zip file
@@ -173,7 +171,7 @@ def package_and_upload_module(root_dir, requirements, module_name, bucket):
     """
 
     assert os.path.isdir(root_dir)
-    assert isinstance(requirements, set)
+    assert os.path.isfile(requirements_path)
 
     # Clean up first (from any previous installation)
     lambda_dir = os.path.join(root_dir, "lambda")
@@ -190,12 +188,15 @@ def package_and_upload_module(root_dir, requirements, module_name, bucket):
     import pip
     pip.main(["install", ".", "-t", "lambda"])
 
-    # Make sure this package is part of the requirements!
-    requirements.add("publish_aws_lambda")
-    requirements.add("unix_dates")
+    # Install requirements
+    pip.main(["install", "-r", requirements_path, "-t", "lambda"])
 
-    for pkg in requirements:
-        pip.main(["install", pkg, "-t", "lambda"])
+    # Make sure this package is part of the requirements!
+    pip.main(["install", "publish_aws_lambda", "-t", "lambda"])
+    pip.main(["install", "unix_dates", "-t", "lambda"])
+
+    # No need for boto3 to be packaged
+    pip.main(["uninstall", "-q", "boto3", "-t", "lambda"])
 
     # ZIP it up!
     shutil.make_archive("lambda", "zip", lambda_dir)
@@ -211,17 +212,20 @@ def package_and_upload_module(root_dir, requirements, module_name, bucket):
     return module_name
 
 
-def publish(root_dir, module_name, requirements, bucket, force=False):
+def publish(root_dir, module_name, bucket, force=False):
     """
     Perform the publish / sync of the lambda functions. This includes packaging the lambda functions in this
     module, uploading it to S3 and then setting up the lambda function configuration
 
     :type root_dir: str
     :type module_name: str
-    :type requirements: set[str]
     :type bucket: str
     :type force: bool
     """
+
+    # Check root_dir and make sure it has a "requirements.txt" file in it
+    requirements_path = os.path.join(root_dir, "requirements.txt")
+    assert os.path.exists(requirements_path), "Expecting requirements.txt to be in root_dir"
 
     to_create, to_update, to_delete, unchanged = plan(root_dir, module_name, force)
 
@@ -234,8 +238,8 @@ def publish(root_dir, module_name, requirements, bucket, force=False):
 
         s3_object_key = package_and_upload_module(root_dir=root_dir,
                                                   module_name=module_name,
-                                                  requirements=requirements,
-                                                  bucket=bucket)
+                                                  bucket=bucket,
+                                                  requirements_path=requirements_path)
 
         lambda_client.create_function(FunctionName=fn_name,
                                       Runtime="python2.7",
@@ -265,7 +269,7 @@ def publish(root_dir, module_name, requirements, bucket, force=False):
         if "Code" in changes or force:
             s3_object_key = package_and_upload_module(root_dir=root_dir,
                                                       module_name=module_name,
-                                                      requirements=requirements,
+                                                      requirements_path=requirements_path,
                                                       bucket=bucket)
 
             lambda_client.update_function_code(FunctionName=fn_name,
