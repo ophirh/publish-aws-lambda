@@ -1,8 +1,9 @@
 """
 Publish the a python package as AWS lambdas functions.
 """
+import glob
 
-from __future__ import print_function
+import logging
 import os
 import pprint
 import shutil
@@ -12,6 +13,7 @@ from unix_dates import UnixDate
 
 lambda_client = boto3.client("lambda")
 s3_client = boto3.client("s3")
+logger = logging.getLogger(__name__)
 
 
 def aws_lambda(role_arn, timeout=60, memory=128, description=""):
@@ -59,7 +61,43 @@ def get_all_lambda_functions_in_module(module_name):
     return lambda_functions
 
 
-def plan(module_name):
+def get_latest_modified_date_in_dir(root_dir):
+    """
+    Recursively scan a directory to get the latest changes (used to detect if we need to upload code)
+
+    :return: The latest modified date of all files in the directory
+    """
+    latest_modified = None
+
+    for root, _, filenames in os.walk(root_dir):
+        for fn in filenames:
+            p = os.path.join(root, fn)
+
+            parts = p.split(os.sep)
+
+            if len(parts) > 1:
+                if parts[1].startswith("."):
+                    logger.debug("Skipping {}".format(p))
+                    continue
+
+                if parts[1] in ("lib", "lambda", "bin", "dist", "include"):
+                    logger.debug("Skipping {}".format(p))
+                    continue
+
+            # Only consider the 'interesting files'. We don't want to scan random files
+            _, ext = os.path.splitext(p)
+            if ext not in (".py", ".txt", ".sh"):
+                continue
+
+            lm = os.stat(p).st_mtime
+
+            if lm > (latest_modified or 0):
+                latest_modified = lm
+
+    return latest_modified
+
+
+def plan(root_dir, module_name, force):
     """
     Create a plan of upgrade existing AWS lambda functions with latest for this module.
     """
@@ -70,12 +108,12 @@ def plan(module_name):
     to_create = {k: fn for k, fn in module_functions.iteritems() if k not in aws_functions}
     to_delete = {k: fn for k, fn in aws_functions.iteritems() if k not in module_functions}
 
-    last_modified = os.path.getmtime(__import__(module_name).__file__)
+    last_modified = get_latest_modified_date_in_dir(root_dir)
 
     # Examine the ones to update to see if anything changed...
     to_update, unchanged = {}, set()
-    for k, aws_function in aws_functions.iteritems():
-        module_function = module_functions.get(k)
+    for fn_name, aws_function in aws_functions.iteritems():
+        module_function = module_functions.get(fn_name)
         if not module_function:
             # We are looking for the ones that are in BOTH lists (to update / unchanged)
             continue
@@ -97,13 +135,15 @@ def plan(module_name):
 
         # Check last modified (need to be within reasonable delta)
         if UnixDate.to_unix_time_from_iso_format(aws_function["LastModified"]) < last_modified:
+            logger.info("Detected code change in function {}".format(fn_name))
+
             changed = True
             changes.add("Code")
 
-        if changed:
-            to_update[k] = (aws_function, module_function, changes)
+        if changed or force:
+            to_update[fn_name] = (aws_function, module_function, changes)
         else:
-            unchanged.add(k)
+            unchanged.add(fn_name)
 
     return to_create, to_update, to_delete, unchanged
 
@@ -112,19 +152,24 @@ def print_plan(module, to_create, to_update, to_delete, unchanged):
     # Group updates by reason
     update_with_reason = {(k, d[2]) for k, d in to_update.iteritems()}
 
-    pprint.pprint("The plan is (for module {}):".format(module))
-    pprint.pprint("   Create: {}".format(to_create.keys()))
-    pprint.pprint("   Delete: {}".format(to_delete.keys()))
-    pprint.pprint("   Update: {}".format(update_with_reason))
-    pprint.pprint("   Unchanged: {}".format(unchanged))
+    logger.info(pprint.pformat("The plan is (for module {}):".format(module)))
+    logger.info(pprint.pformat("   Create: {}".format(to_create.keys())))
+    logger.info(pprint.pformat("   Delete: {}".format(to_delete.keys())))
+    logger.info(pprint.pformat("   Update: {}".format(update_with_reason)))
+    logger.info(pprint.pformat("   Unchanged: {}".format(unchanged)))
 
 
 def package_and_upload_module(root_dir, requirements, module_name, bucket):
     """
+    Installs the module + all requirements into a folder ('lambda'). Zip it ('lambda.zip') and
+    upload it to the indicated bucket in S3.
 
     :type root_dir: str
     :type requirements: set[str]
     :type bucket: str
+
+    :return: The s3 object key, path to the local zip file
+    :rtype: str
     """
 
     assert os.path.isdir(root_dir)
@@ -147,6 +192,7 @@ def package_and_upload_module(root_dir, requirements, module_name, bucket):
 
     # Make sure this package is part of the requirements!
     requirements.add("publish_aws_lambda")
+    requirements.add("unix_dates")
 
     for pkg in requirements:
         pip.main(["install", pkg, "-t", "lambda"])
@@ -160,30 +206,31 @@ def package_and_upload_module(root_dir, requirements, module_name, bucket):
                           Key=module_name,
                           ExtraArgs={'ACL': 'bucket-owner-full-control'})
 
-    print("Uploaded {} to S3 bucket {} as {}".format(lambda_zip, bucket, module_name))
+    logger.info("Uploaded {} to S3 bucket {} as {}".format(lambda_zip, bucket, module_name))
 
     return module_name
 
 
-def publish(root_dir, module_name, requirements, bucket):
+def publish(root_dir, module_name, requirements, bucket, force=False):
     """
-    Actually perform the publish / sync of the lambda functions. This includes packaging the lambda functions in this
+    Perform the publish / sync of the lambda functions. This includes packaging the lambda functions in this
     module, uploading it to S3 and then setting up the lambda function configuration
 
     :type root_dir: str
     :type module_name: str
     :type requirements: set[str]
     :type bucket: str
+    :type force: bool
     """
 
-    to_create, to_update, to_delete, unchanged = plan(module_name)
+    to_create, to_update, to_delete, unchanged = plan(root_dir, module_name, force)
 
     for fn_name in to_delete.keys():
-        print("Deleting lambda function {}".format(fn_name))
+        logger.info("Deleting lambda function {}".format(fn_name))
         lambda_client.delete_function(FunctionName=fn_name)
 
     for fn_name, fn in to_create.iteritems():
-        print("Creating lambda function {}".format(fn_name))
+        logger.info("Creating lambda function {}".format(fn_name))
 
         s3_object_key = package_and_upload_module(root_dir=root_dir,
                                                   module_name=module_name,
@@ -204,7 +251,7 @@ def publish(root_dir, module_name, requirements, bucket):
                                       Publish=True)
 
     for fn_name, (aws_function, module_function, changes) in to_update.iteritems():
-        print("Updating lambda function {}".format(fn_name))
+        logger.info("Updating lambda function {}".format(fn_name))
 
         # Check if we need to change the attributes of the function
         if {"Role", "MemorySize", "Timeout"}.intersection(changes):
@@ -215,7 +262,7 @@ def publish(root_dir, module_name, requirements, bucket):
                                                         Timeout=module_function.__aws_lambda_timeout__,
                                                         MemorySize=module_function.__aws_lambda_memory__)
 
-        if "Code" in changes:
+        if "Code" in changes or force:
             s3_object_key = package_and_upload_module(root_dir=root_dir,
                                                       module_name=module_name,
                                                       requirements=requirements,
