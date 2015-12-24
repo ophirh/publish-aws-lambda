@@ -123,12 +123,12 @@ def package_and_upload_module(root_dir, requirements, module_name, bucket):
     """
 
     :type root_dir: str
-    :type requirements: list[str]
+    :type requirements: set[str]
     :type bucket: str
     """
 
     assert os.path.isdir(root_dir)
-    assert isinstance(requirements, list)
+    assert isinstance(requirements, set)
 
     # Clean up first (from any previous installation)
     lambda_dir = os.path.join(root_dir, "lambda")
@@ -144,6 +144,9 @@ def package_and_upload_module(root_dir, requirements, module_name, bucket):
     # Install the required packages
     import pip
     pip.main(["install", ".", "-t", "lambda"])
+
+    # Make sure this package is part of the requirements!
+    requirements.add("publish_aws_lambda")
 
     for pkg in requirements:
         pip.main(["install", pkg, "-t", "lambda"])
@@ -169,7 +172,7 @@ def publish(root_dir, module_name, requirements, bucket):
 
     :type root_dir: str
     :type module_name: str
-    :type requirements: list[str]
+    :type requirements: set[str]
     :type bucket: str
     """
 

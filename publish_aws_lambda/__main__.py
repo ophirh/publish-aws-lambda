@@ -23,7 +23,7 @@ if options.dry_run:
 else:
     publish(root_dir=options.dir,
             module_name=options.module,
-            requirements=options.requirements.split(",") if len(options.requirements.strip()) > 0 else [],
+            requirements=set(options.requirements.split(",") if len(options.requirements.strip()) > 0 else []),
             bucket=options.bucket)
 
     print("Done!")
