@@ -23,4 +23,4 @@ Publish a Python package as a set of AWS lambda functions.
             print("Hello World!!!")
 
 ### How to publish: ###
-    python -m publish_aws_lambda --module=my_module --bucket=s3bucketname --requirements=requests,publish_aws_lambda
+    python -m publish_aws_lambda --module=my_module --bucket=s3bucketname --requirements=publish_aws_lambda,...
