@@ -15,10 +15,12 @@ Publish a Python package as a set of AWS lambda functions.
 
 
 
-### How to use: ###
+### How to create a lambda function: ###
     from publish_aws_lambda import aws_lambda
     
     @aws_lambda(role_arn="arn:aws:iam::....:role/SomeRole", timeout=5)
         def my_lambda(event, context):
             print("Hello World!!!")
 
+### How to publish: ###
+    python -m publish_aws_lambda --module=my_module --bucket=s3bucketname --requirements=requests,publish_aws_lambda
