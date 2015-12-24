@@ -14,3 +14,12 @@ Publish a Python package as a set of AWS lambda functions.
     * Create / Update / Delete the Lambda function in AWS
 
 
+
+### How to use: ###
+   from publish_aws_lambda import aws_lambda
+ 
+   @aws_lambda(role_arn="arn:aws:iam::....:role/SomeRole", timeout=5)
+   def my_lambda(event, context):
+      print("Hello World!!!")
+
+
