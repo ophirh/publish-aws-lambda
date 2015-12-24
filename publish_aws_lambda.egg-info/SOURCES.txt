@@ -1,0 +1,8 @@
+setup.cfg
+setup.py
+publish_aws_lambda/__init__.py
+publish_aws_lambda/__main__.py
+publish_aws_lambda.egg-info/PKG-INFO
+publish_aws_lambda.egg-info/SOURCES.txt
+publish_aws_lambda.egg-info/dependency_links.txt
+publish_aws_lambda.egg-info/top_level.txt

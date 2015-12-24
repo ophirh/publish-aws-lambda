@@ -1,0 +1,11 @@
+Metadata-Version: 1.0
+Name: publish-aws-lambda
+Version: 0.1
+Summary: Publish a Python module as a set of AWS lambda functions
+Home-page: https://github.com/ophirh/publish-aws-lambda
+Author: Ophir
+Author-email: opensource@itculate.io
+License: MIT
+Description: UNKNOWN
+Keywords: aws,lambda,publish
+Platform: UNKNOWN
