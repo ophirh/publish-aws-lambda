@@ -173,12 +173,15 @@ def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
     assert os.path.isdir(root_dir)
     assert os.path.isfile(requirements_path)
 
+    dist_dir = os.path.join(root_dir, "dist")
+    lambda_target = "lambdas"
+
     # Clean up first (from any previous installation)
-    lambda_dir = os.path.join(root_dir, "lambda")
+    lambda_dir = os.path.join(dist_dir, lambda_target)
     if os.path.exists(lambda_dir):
         shutil.rmtree(lambda_dir)
 
-    lambda_zip = os.path.join(root_dir, "lambda.zip")
+    lambda_zip = os.path.join(dist_dir, "{}.zip".format(lambda_target))
     if os.path.exists(lambda_zip):
         os.remove(lambda_zip)
 
@@ -186,14 +189,14 @@ def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
 
     # Install the required packages
     import pip
-    pip.main(["install", ".", "-t", "lambda"])
+    pip.main(["install", ".", "-t", lambda_dir])
 
     # Install requirements
-    pip.main(["install", "-r", requirements_path, "-t", "lambda"])
+    pip.main(["install", "-r", requirements_path, "-t", lambda_dir])
 
     # Make sure this package is part of the requirements!
-    pip.main(["install", "publish_aws_lambda", "-t", "lambda"])
-    pip.main(["install", "unix_dates", "-t", "lambda"])
+    pip.main(["install", "publish_aws_lambda", "-t", lambda_dir])
+    pip.main(["install", "unix_dates", "-t", lambda_dir])
 
     # No need for boto3 to be packaged
     for fn in os.listdir(lambda_dir):
@@ -203,7 +206,7 @@ def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
             shutil.rmtree(p)
 
     # ZIP it up!
-    shutil.make_archive("lambda", "zip", lambda_dir)
+    lambda_zip = shutil.make_archive(lambda_target, "zip", lambda_dir)
 
     # And upload to S3 (use module as object key)
     s3_client.upload_file(Filename=lambda_zip,
