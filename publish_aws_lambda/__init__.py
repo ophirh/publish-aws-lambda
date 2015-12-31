@@ -270,7 +270,9 @@ def publish(root_dir, modules, bucket, force=False):
                                       MemorySize=fn.__aws_lambda_memory__,
                                       Publish=True)
 
-    for fn_name, (aws_function, module_function, changes) in to_update.iteritems():
+    for fn_key, (aws_function, module_function, changes) in to_update.iteritems():
+        module_name, fn_name = fn_key
+
         logger.info("Updating lambda function {}".format(fn_name))
 
         # Check if we need to change the attributes of the function
