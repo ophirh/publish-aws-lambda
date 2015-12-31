@@ -4,5 +4,4 @@ include/
 lib/
 .idea/
 pip-selfcheck.json
-dist/
 publish_aws_lambda.egg-info/
