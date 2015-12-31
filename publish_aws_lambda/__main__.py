@@ -10,25 +10,25 @@ parser = optparse.OptionParser(description="Publish auth Lambdas into AWS (code 
 
 parser.add_option("--dry-run", dest="dry_run", action="store_true", help="Plan but don't execute")
 parser.add_option("--dir", dest="dir", default=".", help="Root dir of project to upload")
-parser.add_option("--module", dest="module", help="Python module to upload as AWS lambda functions")
+parser.add_option("--module", dest="modules", action="append", help="Python modules to upload as AWS lambda functions")
 parser.add_option("--bucket", dest="bucket", help="S3 bucket to upload code into")
 parser.add_option("--force-upload", dest="force", action="store_true", default=False, help="Force upload to S3")
 
 options, args = parser.parse_args()
 
-assert options.module, "Python module has to be provided"
+assert options.modules, "At least one python module has to be provided"
 assert options.bucket, "S3 bucket has to be provided"
 
 if options.dry_run:
     p = plan(root_dir=options.dir,
-             module_name=options.module,
+             modules=options.modules,
              force=options.force)
 
-    print_plan(options.module, *p)
+    print_plan(options.modules, *p)
 
 else:
     publish(root_dir=options.dir,
-            module_name=options.module,
+            modules=options.modules,
             bucket=options.bucket,
             force=options.force)
 

@@ -96,13 +96,20 @@ def get_latest_modified_date_in_dir(root_dir):
     return latest_modified
 
 
-def plan(root_dir, module_name, force):
+def plan(root_dir, modules, force):
     """
     Create a plan of upgrade existing AWS lambda functions with latest for this module.
     """
-    module_functions = {fn.__name__: fn for fn in get_all_lambda_functions_in_module(module_name)}
-    aws_functions = {fn["FunctionName"]: fn for fn in lambda_client.list_functions()["Functions"] if
-                     fn["Handler"].startswith(module_name)}
+    module_functions = {}
+    aws_functions = {}
+
+    for module_name in modules:
+        module_functions.update(
+            {(module_name, fn.__name__): fn for fn in get_all_lambda_functions_in_module(module_name)})
+
+        aws_functions.update(
+            {(module_name, fn["FunctionName"]): fn for fn in lambda_client.list_functions()["Functions"] if
+                         fn["Handler"].startswith(module_name)})
 
     to_create = {k: fn for k, fn in module_functions.iteritems() if k not in aws_functions}
     to_delete = {k: fn for k, fn in aws_functions.iteritems() if k not in module_functions}
@@ -111,8 +118,8 @@ def plan(root_dir, module_name, force):
 
     # Examine the ones to update to see if anything changed...
     to_update, unchanged = {}, set()
-    for fn_name, aws_function in aws_functions.iteritems():
-        module_function = module_functions.get(fn_name)
+    for fn_key, aws_function in aws_functions.iteritems():
+        module_function = module_functions.get(fn_key)
         if not module_function:
             # We are looking for the ones that are in BOTH lists (to update / unchanged)
             continue
@@ -134,24 +141,24 @@ def plan(root_dir, module_name, force):
 
         # Check last modified (need to be within reasonable delta)
         if UnixDate.to_unix_time_from_iso_format(aws_function["LastModified"]) < last_modified:
-            logger.info("Detected code change in function {}".format(fn_name))
+            logger.info("Detected code change in function {}".format(fn_key))
 
             changed = True
             changes.add("Code")
 
         if changed or force:
-            to_update[fn_name] = (aws_function, module_function, changes)
+            to_update[fn_key] = (aws_function, module_function, changes)
         else:
-            unchanged.add(fn_name)
+            unchanged.add(fn_key)
 
     return to_create, to_update, to_delete, unchanged
 
 
-def print_plan(module, to_create, to_update, to_delete, unchanged):
+def print_plan(modules, to_create, to_update, to_delete, unchanged):
     # Group updates by reason
     update_with_reason = {(k, d[2]) for k, d in to_update.iteritems()}
 
-    logger.info(pprint.pformat("The plan is (for module {}):".format(module)))
+    logger.info(pprint.pformat("The plan is (for modules {}):".format(modules)))
     logger.info(pprint.pformat("   Create: {}".format(to_create.keys())))
     logger.info(pprint.pformat("   Delete: {}".format(to_delete.keys())))
     logger.info(pprint.pformat("   Update: {}".format(update_with_reason)))
@@ -219,7 +226,7 @@ def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
     return module_name
 
 
-def publish(root_dir, module_name, bucket, force=False):
+def publish(root_dir, modules, bucket, force=False):
     """
     Perform the publish / sync of the lambda functions. This includes packaging the lambda functions in this
     module, uploading it to S3 and then setting up the lambda function configuration
@@ -234,13 +241,15 @@ def publish(root_dir, module_name, bucket, force=False):
     requirements_path = os.path.join(root_dir, "requirements.txt")
     assert os.path.exists(requirements_path), "Expecting requirements.txt to be in root_dir"
 
-    to_create, to_update, to_delete, unchanged = plan(root_dir, module_name, force)
+    to_create, to_update, to_delete, unchanged = plan(root_dir, modules, force)
 
     for fn_name in to_delete.keys():
         logger.info("Deleting lambda function {}".format(fn_name))
         lambda_client.delete_function(FunctionName=fn_name)
 
-    for fn_name, fn in to_create.iteritems():
+    for fn_key, fn in to_create.iteritems():
+        module_name, fn_name = fn_key
+
         logger.info("Creating lambda function {}".format(fn_name))
 
         s3_object_key = package_and_upload_module(root_dir=root_dir,
