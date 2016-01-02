@@ -19,8 +19,8 @@ Publish a Python package as a set of AWS lambda functions.
     from publish_aws_lambda import aws_lambda
     
     @aws_lambda(role_arn="arn:aws:iam::....:role/SomeRole", timeout=5)
-        def my_lambda(event, context):
-            print("Hello World!!!")
+    def my_lambda(event, context):
+        print("Hello World!!!")
 
 ### How to publish: ###
     python -m publish_aws_lambda --module=my_module1 --module=my_module2 --bucket=s3bucketname
