@@ -5,7 +5,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='publish-aws-lambda',
-    version='0.3.2',
+    version='0.3.3',
     description='Publish a Python module as a set of AWS lambda functions',
     url='https://github.com/ophirh/publish-aws-lambda',
     author='Ophir',

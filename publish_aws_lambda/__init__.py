@@ -8,6 +8,7 @@ import pprint
 import shutil
 import types
 import boto3
+# noinspection PyPackageRequirements
 from unix_dates import UnixDate
 
 lambda_client = boto3.client("lambda")
@@ -15,7 +16,14 @@ s3_client = boto3.client("s3")
 logger = logging.getLogger(__name__)
 
 
-def aws_lambda(role_arn, timeout=60, memory=128, description=""):
+def aws_lambda(role_arn, timeout=60, memory=128, description="", vpc_config=None):
+    """
+    :type role_arn: str
+    :type timeout: int
+    :type memory: int
+    :type description: str
+    :type vpc_config: dict
+    """
     def decorator(func):
         """
         Decorator to help identify which of the methods in a module are AWS Lambda functions.
@@ -29,6 +37,7 @@ def aws_lambda(role_arn, timeout=60, memory=128, description=""):
         func.__aws_lambda_timeout__ = timeout
         func.__aws_lambda_memory__ = memory
         func.__aws_lambda_description__ = description
+        func.__aws_vpc_config__ = vpc_config
 
         return func
 
@@ -99,6 +108,10 @@ def get_latest_modified_date_in_dir(root_dir):
 def plan(root_dir, modules, force):
     """
     Create a plan of upgrade existing AWS lambda functions with latest for this module.
+
+    :type root_dir: str
+    :type modules: collections.Iterable[str]
+    :type force: bool
     """
     module_functions = {}
     aws_functions = {}
@@ -108,8 +121,8 @@ def plan(root_dir, modules, force):
             {(module_name, fn.__name__): fn for fn in get_all_lambda_functions_in_module(module_name)})
 
         aws_functions.update(
-            {(module_name, fn["FunctionName"]): fn for fn in lambda_client.list_functions()["Functions"] if
-                         fn["Handler"].startswith(module_name)})
+            {(module_name, fn["FunctionName"]):
+                 fn for fn in lambda_client.list_functions()["Functions"] if fn["Handler"].startswith(module_name)})
 
     to_create = {k: fn for k, fn in module_functions.iteritems() if k not in aws_functions}
     to_delete = {k: fn for k, fn in aws_functions.iteritems() if k not in module_functions}
@@ -232,7 +245,7 @@ def publish(root_dir, modules, bucket, force=False):
     module, uploading it to S3 and then setting up the lambda function configuration
 
     :type root_dir: str
-    :type module_name: str
+    :type modules: collections.Iterable[str]
     :type bucket: str
     :type force: bool
     """
@@ -268,6 +281,7 @@ def publish(root_dir, modules, bucket, force=False):
                                       Description=fn.__aws_lambda_description__,
                                       Timeout=fn.__aws_lambda_timeout__,
                                       MemorySize=fn.__aws_lambda_memory__,
+                                      VpcConfig=fn.__aws_vpc_config__,
                                       Publish=True)
 
     for fn_key, (aws_function, module_function, changes) in to_update.iteritems():
