@@ -11,9 +11,8 @@ import boto3
 # noinspection PyPackageRequirements
 from unix_dates import UnixDate
 
-lambda_client = boto3.client("lambda")
-s3_client = boto3.client("s3")
 logger = logging.getLogger(__name__)
+DEFAULT_REGION = "us-east-1"
 
 
 def aws_lambda(role_arn, timeout=60, memory=128, description="", vpc_config=None):
@@ -24,6 +23,7 @@ def aws_lambda(role_arn, timeout=60, memory=128, description="", vpc_config=None
     :type description: str
     :type vpc_config: dict
     """
+
     def decorator(func):
         """
         Decorator to help identify which of the methods in a module are AWS Lambda functions.
@@ -105,16 +105,20 @@ def get_latest_modified_date_in_dir(root_dir):
     return latest_modified
 
 
-def plan(root_dir, modules, force):
+def plan(root_dir, modules, force, region=DEFAULT_REGION):
     """
     Create a plan of upgrade existing AWS lambda functions with latest for this module.
 
     :type root_dir: str
     :type modules: collections.Iterable[str]
     :type force: bool
+    :type force: bool
+    :type region: str
     """
     module_functions = {}
     aws_functions = {}
+
+    lambda_client = boto3.client("lambda", region_name=region)
 
     for module_name in modules:
         module_functions.update(
@@ -178,17 +182,22 @@ def print_plan(modules, to_create, to_update, to_delete, unchanged):
     logger.info(pprint.pformat("   Unchanged: {}".format(unchanged)))
 
 
-def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
+def package_and_upload_module(root_dir, requirements_path, module_name, bucket, region=DEFAULT_REGION):
     """
     Installs the module + all requirements into a folder ('lambda'). Zip it ('lambda.zip') and
     upload it to the indicated bucket in S3.
 
     :type root_dir: str
     :type bucket: str
+    :type requirements_path: str
+    :type module_name: str
+    :type region: str
 
     :return: The s3 object key, path to the local zip file
     :rtype: str
     """
+
+    s3_client = boto3.client("s3", region_name=region)
 
     assert os.path.isdir(root_dir)
     assert os.path.isfile(requirements_path)
@@ -239,7 +248,7 @@ def package_and_upload_module(root_dir, requirements_path, module_name, bucket):
     return module_name
 
 
-def publish(root_dir, modules, bucket, force=False):
+def publish(root_dir, modules, bucket, force=False, region=DEFAULT_REGION):
     """
     Perform the publish / sync of the lambda functions. This includes packaging the lambda functions in this
     module, uploading it to S3 and then setting up the lambda function configuration
@@ -248,7 +257,10 @@ def publish(root_dir, modules, bucket, force=False):
     :type modules: collections.Iterable[str]
     :type bucket: str
     :type force: bool
+    :type region: str
     """
+
+    lambda_client = boto3.client("lambda", region_name=region)
 
     # Check root_dir and make sure it has a "requirements.txt" file in it
     requirements_path = os.path.join(root_dir, "requirements.txt")
