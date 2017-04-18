@@ -1,3 +1,5 @@
+__version__ = "0.4.2"
+
 """
 Publish the a python package as AWS lambdas functions.
 """
@@ -12,7 +14,6 @@ import boto3
 from unix_dates import UnixDate
 
 logger = logging.getLogger(__name__)
-DEFAULT_REGION = "us-east-1"
 
 
 def aws_lambda(role_arn, timeout=60, memory=128, description="", vpc_config=None):
@@ -105,7 +106,7 @@ def get_latest_modified_date_in_dir(root_dir):
     return latest_modified
 
 
-def plan(root_dir, modules, force, region=DEFAULT_REGION):
+def plan(root_dir, modules, force, region):
     """
     Create a plan of upgrade existing AWS lambda functions with latest for this module.
 
@@ -182,7 +183,7 @@ def print_plan(modules, to_create, to_update, to_delete, unchanged):
     logger.info(pprint.pformat("   Unchanged: {}".format(unchanged)))
 
 
-def package_and_upload_module(root_dir, requirements_path, module_name, bucket, region=DEFAULT_REGION):
+def package_and_upload_module(root_dir, requirements_path, module_name, bucket, region):
     """
     Installs the module + all requirements into a folder ('lambda'). Zip it ('lambda.zip') and
     upload it to the indicated bucket in S3.
@@ -248,7 +249,7 @@ def package_and_upload_module(root_dir, requirements_path, module_name, bucket, 
     return module_name
 
 
-def publish(root_dir, modules, bucket, force=False, region=DEFAULT_REGION):
+def publish(root_dir, modules, bucket, region, force=False):
     """
     Perform the publish / sync of the lambda functions. This includes packaging the lambda functions in this
     module, uploading it to S3 and then setting up the lambda function configuration
@@ -266,7 +267,7 @@ def publish(root_dir, modules, bucket, force=False, region=DEFAULT_REGION):
     requirements_path = os.path.join(root_dir, "requirements.txt")
     assert os.path.exists(requirements_path), "Expecting requirements.txt to be in root_dir"
 
-    to_create, to_update, to_delete, unchanged = plan(root_dir, modules, force)
+    to_create, to_update, to_delete, unchanged = plan(root_dir, modules, force, region=region)
 
     for fn_name in to_delete.keys():
         logger.info("Deleting lambda function {}".format(fn_name))
@@ -280,7 +281,8 @@ def publish(root_dir, modules, bucket, force=False, region=DEFAULT_REGION):
         s3_object_key = package_and_upload_module(root_dir=root_dir,
                                                   module_name=module_name,
                                                   bucket=bucket,
-                                                  requirements_path=requirements_path)
+                                                  requirements_path=requirements_path,
+                                                  region=region)
 
         lambda_client.create_function(FunctionName=fn_name,
                                       Runtime="python2.7",
@@ -314,7 +316,8 @@ def publish(root_dir, modules, bucket, force=False, region=DEFAULT_REGION):
             s3_object_key = package_and_upload_module(root_dir=root_dir,
                                                       module_name=module_name,
                                                       requirements_path=requirements_path,
-                                                      bucket=bucket)
+                                                      bucket=bucket,
+                                                      region=region)
 
             lambda_client.update_function_code(FunctionName=fn_name,
                                                S3Bucket=bucket,

@@ -3,6 +3,8 @@ import optparse
 import sys
 from publish_aws_lambda import plan, print_plan, publish
 
+DEFAULT_REGION = "us-east-1"
+
 logging.basicConfig(level=logging.INFO, format="%(message)s", datefmt="%Y-%m-%d %H:%M:%S", stream=sys.stdout)
 
 # Check the command line...
@@ -13,6 +15,7 @@ parser.add_option("--dir", dest="dir", default=".", help="Root dir of project to
 parser.add_option("--module", dest="modules", action="append", help="Python modules to upload as AWS lambda functions")
 parser.add_option("--bucket", dest="bucket", help="S3 bucket to upload code into")
 parser.add_option("--force-upload", dest="force", action="store_true", default=False, help="Force upload to S3")
+parser.add_option("--region", dest="region", default=DEFAULT_REGION, help="AWS Region")
 
 options, args = parser.parse_args()
 
@@ -22,7 +25,8 @@ assert options.bucket, "S3 bucket has to be provided"
 if options.dry_run:
     p = plan(root_dir=options.dir,
              modules=options.modules,
-             force=options.force)
+             force=options.force,
+             region=options.region)
 
     print_plan(options.modules, *p)
 
@@ -30,6 +34,7 @@ else:
     publish(root_dir=options.dir,
             modules=options.modules,
             bucket=options.bucket,
-            force=options.force)
+            force=options.force,
+            region=options.region)
 
     print("Done!")
