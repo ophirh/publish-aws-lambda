@@ -14,4 +14,8 @@ setup(
     license="MIT",
     keywords=["aws", "lambda", "publish"],
     packages=find_packages(),
+    install_requires=[
+        "boto3>=1.4.4",
+        "unix-dates>=0.4.1",
+    ],
 )
