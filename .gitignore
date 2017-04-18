@@ -6,4 +6,4 @@ dist/
 .idea/
 pip-selfcheck.json
 publish_aws_lambda.egg-info/
-.pyc
+*.pyc
